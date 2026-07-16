@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A real FastAPI LLM gateway running in your browser — hit it with requests and watch auth, caching, rate limiting and cost accounting actually work.">
+<title>llm-gateway — a FastAPI gateway in your browser</title>
+<style>
+  :root {
+    --ink:#0e1316; --panel:#141c21; --raised:#1b252b;
+    --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.05);
+    --fg:#dae2e4; --fg-dim:#8a989e; --fg-faint:#5e6c72;
+    --amber-ink:#f2a53c; --amber-soft:rgba(242,165,60,.13); --amber-line:rgba(242,165,60,.34);
+    --teal:#48c1ac; --teal-soft:rgba(72,193,172,.12);
+    --red:#f87171; --red-soft:rgba(248,113,113,.12);
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--ink); color:var(--fg); font-family:var(--sans); font-size:16px; line-height:1.6;
+    -webkit-font-smoothing:antialiased; padding:0 20px 80px;
+    background-image:linear-gradient(var(--line-2) 1px,transparent 1px),linear-gradient(90deg,var(--line-2) 1px,transparent 1px);
+    background-size:34px 34px}
+  .col{max-width:880px; margin:0 auto}
+  a{color:var(--amber-ink); text-decoration:none}
+  code{font-family:var(--mono); color:var(--amber-ink); font-size:.92em}
+  header{padding:56px 0 28px; border-bottom:1px solid var(--line)}
+  .eye{font-family:var(--mono); font-size:12px; letter-spacing:.28em; text-transform:uppercase; color:var(--amber-ink); display:flex; align-items:center; gap:10px}
+  .eye::before{content:""; width:26px; height:1px; background:var(--amber-line)}
+  h1{font-family:var(--mono); font-weight:600; font-size:clamp(30px,6vw,48px); line-height:1.05; letter-spacing:-.02em; margin:16px 0 0}
+  .lede{color:var(--fg-dim); max-width:64ch; margin:16px 0 0}
+  .lede b{color:var(--fg)}
+  .status{display:flex; align-items:center; gap:10px; margin-top:22px; font-family:var(--mono); font-size:13px; color:var(--fg-dim);
+    border:1px solid var(--line); background:var(--panel); padding:10px 14px; border-radius:3px}
+  .dot{width:8px; height:8px; border-radius:50%; background:var(--amber-ink); animation:pulse 1.4s ease-in-out infinite; flex:none}
+  .status.ready .dot{background:var(--teal); animation:none}
+  .status.err .dot{background:var(--red); animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  section{padding:34px 0; border-bottom:1px solid var(--line)}
+  .label{font-family:var(--mono); font-size:11.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--amber-ink)}
+  h2{font-family:var(--mono); font-weight:600; font-size:clamp(19px,3vw,24px); margin:.5rem 0 0}
+  p.intro{color:var(--fg-dim); max-width:66ch}
+  button{font-family:var(--mono); font-size:12.5px; padding:9px 13px; border-radius:2px; cursor:pointer; margin:3px 3px 3px 0;
+    border:1px solid var(--line); color:var(--fg-dim); background:transparent; transition:all .15s}
+  button:hover:not(:disabled){color:var(--fg); border-color:var(--fg-dim)}
+  button.primary{border-color:var(--amber-line); color:var(--amber-ink); background:var(--amber-soft)}
+  button.primary:hover:not(:disabled){background:var(--amber-ink); color:var(--ink)}
+  button:disabled{opacity:.4; cursor:not-allowed}
+  input[type=text]{width:100%; background:var(--raised); border:1px solid var(--line); border-radius:3px; color:var(--fg);
+    font-family:var(--sans); font-size:15px; padding:10px 12px}
+  input[type=text]:focus{outline:none; border-color:var(--amber-line)}
+  .row{display:flex; gap:8px; margin:12px 0 6px}
+  .row input{flex:1}
+  .grp{margin-top:14px}
+  .grp .gl{font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--fg-faint); margin-bottom:4px}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(104px,1fr)); gap:8px; margin-top:14px}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:11px}
+  .card .k{font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--fg-faint)}
+  .card .v{font-size:1.25rem; font-weight:650; margin-top:2px; font-family:var(--mono)}
+  .teal{color:var(--teal)} .red{color:var(--red)} .amber{color:var(--amber-ink)} .dim{color:var(--fg-faint)}
+  .req{border:1px solid var(--line); border-left:2px solid var(--line); border-radius:3px; background:var(--panel); padding:11px 13px; margin-top:8px}
+  .reqhead{font-family:var(--mono); font-size:12.5px; display:flex; align-items:center; gap:9px; flex-wrap:wrap}
+  .method{color:var(--fg-faint); font-size:10.5px; letter-spacing:.08em}
+  .code{font-weight:700; padding:1px 7px; border-radius:2px; font-size:11.5px}
+  .code.ok{color:var(--teal); background:var(--teal-soft)}
+  .code.warn{color:var(--amber-ink); background:var(--amber-soft)}
+  .code.bad{color:var(--red); background:var(--red-soft)}
+  .ms{color:var(--fg-faint); font-size:11px; margin-left:auto}
+  .kv{font-family:var(--mono); font-size:12.5px; color:var(--fg-dim); margin-top:6px}
+  .kv span{color:var(--fg-faint); font-size:11px}
+  details{margin-top:7px} summary{font-family:var(--mono); font-size:11px; color:var(--fg-faint); cursor:pointer}
+  pre{font-family:var(--mono); font-size:11.5px; background:#0a0e11; border:1px solid var(--line); border-radius:3px;
+    padding:11px; overflow-x:auto; color:var(--fg-dim); margin-top:6px; max-height:230px}
+  #out{margin-top:16px; max-height:560px; overflow-y:auto}
+  footer{padding:34px 0 0; color:var(--fg-faint); font-size:13.5px}
+  .note{border-left:2px solid var(--amber-line); padding-left:14px; margin-top:16px; color:var(--fg-faint); font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="col">
+
+  <header>
+    <div class="eye">Live in your browser</div>
+    <h1>llm-gateway</h1>
+    <p class="lede">A <b>real FastAPI application</b>, handling real requests — in this tab. Auth, per-key rate limiting, response caching, retries and cost accounting all execute exactly as they do in production. Hit the buttons and watch the middleware actually work.</p>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">Booting Python…</span></div>
+  </header>
+
+  <section>
+    <div class="label">// Send requests</div>
+    <h2>Poke the gateway</h2>
+    <p class="intro">Each button is a real HTTP request through the real ASGI app. Watch the status codes — and send the same message twice to see the cache take over.</p>
+
+    <div class="row">
+      <input type="text" id="msg" value="hello gateway" aria-label="Message">
+      <button class="primary" data-act="chat" disabled>POST /v1/chat/completions</button>
+    </div>
+
+    <div class="grp">
+      <div class="gl">Caching</div>
+      <button data-act="twice" disabled>send the same request twice → cache hit</button>
+      <button data-act="priced" disabled>a priced model → real cost</button>
+    </div>
+    <div class="grp">
+      <div class="gl">Auth</div>
+      <button data-act="noauth" disabled>no API key → 401</button>
+      <button data-act="badkey" disabled>wrong key → 401</button>
+    </div>
+    <div class="grp">
+      <div class="gl">Resilience &amp; limits</div>
+      <button data-act="flaky" disabled>a provider that fails twice → retried → 200</button>
+      <button data-act="flood" disabled>flood 10 requests → 429 + Retry-After</button>
+      <button data-act="invalid" disabled>empty messages → 422</button>
+    </div>
+    <div class="grp">
+      <div class="gl">Read-only</div>
+      <button data-act="models" disabled>GET /v1/models</button>
+      <button data-act="health" disabled>GET /health</button>
+    </div>
+
+    <div class="cards" id="metrics"></div>
+    <div style="font-family:var(--mono);font-size:11px;color:var(--fg-faint);margin-top:10px">
+      live <code>/metrics</code> · <span id="reqCount">0</span> requests sent this session ·
+      rate limit set to 8 tokens, refilling 0.5/s so the 429 is reachable by hand
+    </div>
+    <div id="out"></div>
+  </section>
+
+  <footer>
+    <p>Running <a href="https://github.com/egnaro9/llm-gateway">llm-gateway</a> via <a href="https://pyodide.org">Pyodide</a>. The wheel is built from <code>main</code> by CI.</p>
+    <p><b>How this works without a server:</b> a browser tab can't listen on a port, so rather than fake an HTTP layer, the page hands each request directly to the same <b>ASGI application</b> uvicorn would serve, via FastAPI's <code>TestClient</code>. Same app object, same middleware stack, same code paths — only the socket is missing. The provider is the built-in deterministic mock, which is why there's no API key and no spend.</p>
+    <p>Built by <a href="https://egnaro9.github.io">Erik Hill</a>.</p>
+  </footer>
+
+</div>
+<script src="https://cdn.jsdelivr.net/pyodide/v314.0.2/full/pyodide.js"></script>
+<script src="./wheel.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

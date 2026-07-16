@@ -3,6 +3,7 @@
 [![ci](https://github.com/egnaro9/llm-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/egnaro9/llm-gateway/actions/workflows/ci.yml)
 [![python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)](https://fastapi.tiangolo.com/)
+[![live demo](https://img.shields.io/badge/demo-poke%20it%20in%20your%20browser-f2a53c)](https://egnaro9.github.io/llm-gateway/)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **A multi-provider LLM gateway on FastAPI — auth, rate limiting, caching, retries, and per-model cost accounting behind one OpenAI-shaped endpoint.**
@@ -18,6 +19,10 @@ client ─┤                                                                   
 - **One OpenAI-compatible API, many backends.** Route `gpt-*` → OpenAI, `claude-*` → Anthropic, `mock*` → offline mock, by model-id prefix.
 - **Everything a raw SDK doesn't give you:** Bearer-key auth, per-key **token-bucket rate limiting** (429 + `Retry-After`), an **LRU response cache** (identical deterministic prompts skip the provider), **exponential-backoff retries**, **per-model token + USD cost accounting**, a `/metrics` endpoint, and structured JSON request logs with a request id.
 - **Deterministic & offline by default.** The mock provider makes the test suite fast, free, and reproducible. **22 tests, green CI, no secrets.**
+
+### ▶ [Poke the gateway in your browser](https://egnaro9.github.io/llm-gateway/)
+
+The real FastAPI app, running client-side via [Pyodide](https://pyodide.org). Send the same request twice and watch the cache take over; strip the API key for a 401; flood it for a 429 with `Retry-After`; hit `mock-flaky` and watch the retry ride out two failures. A browser can't listen on a socket, so the page speaks **ASGI to the app directly** — the same thing uvicorn does, minus the network.
 
 ---
 

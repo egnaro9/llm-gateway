@@ -10,3 +10,7 @@ venv/
 .env
 demo.out
 .DS_Store
+demo/*.whl
+demo/wheel.js
+site/
+dist/
