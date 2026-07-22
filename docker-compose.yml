@@ -4,14 +4,25 @@ services:
     ports:
       - "8000:8000"
     environment:
-      GATEWAY_API_KEYS: "dev-key,team-key"
+      # Keys come from your shell or a .env file, never baked into the image.
+      # The :-dev-key fallback is for a throwaway local run only.
+      GATEWAY_API_KEYS: "${GATEWAY_API_KEYS:-dev-key}"
       GATEWAY_RATE_CAPACITY: "120"
       GATEWAY_RATE_REFILL: "2.0"
-      # To enable real providers, uncomment and supply keys:
+      # Persist usage to a SQLite file on the named volume, so /metrics survives a
+      # restart. Point this at Postgres (postgresql+psycopg://user:pass@host/db)
+      # for a real deploy — SqlUsageStore is the same code either way.
+      GATEWAY_DATABASE_URL: "sqlite:////data/gateway.db"
+      # To enable real providers, supply keys:
       # OPENAI_API_KEY: "${OPENAI_API_KEY}"
       # ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+    volumes:
+      - gateway-data:/data
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"]
       interval: 10s
       timeout: 3s
       retries: 5
+
+volumes:
+  gateway-data:

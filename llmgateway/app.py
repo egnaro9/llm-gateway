@@ -53,6 +53,7 @@ class Config:
     rate_refill_per_sec: float = 1.0
     cache_size: int = 512
     retries: int = 3
+    database_url: str | None = None
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -62,6 +63,9 @@ class Config:
             rate_capacity=int(os.environ.get("GATEWAY_RATE_CAPACITY", "60")),
             rate_refill_per_sec=float(os.environ.get("GATEWAY_RATE_REFILL", "1.0")),
             cache_size=int(os.environ.get("GATEWAY_CACHE_SIZE", "512")),
+            # Unset -> in-memory metrics (and the browser demo needs no ORM). Set
+            # it (e.g. postgresql+psycopg://… or sqlite:///gateway.db) to persist.
+            database_url=os.environ.get("GATEWAY_DATABASE_URL") or None,
         )
 
 
@@ -81,7 +85,10 @@ class Metrics:
         self.rate_limited = 0
         self.by_model: Dict[str, _ModelStat] = {}
 
-    def record(self, model: str, usage: Usage, cost: float, cached: bool) -> None:
+    def record(self, model: str, usage: Usage, cost: float, cached: bool,
+               latency_ms: float = 0.0) -> None:
+        # latency_ms is accepted for interface-parity with SqlUsageStore, which
+        # persists it per row; the in-memory snapshot doesn't aggregate it.
         with self._lock:
             self.requests += 1
             if cached:
@@ -125,6 +132,16 @@ class Metrics:
 # --------------------------------------------------------------------------- #
 # App factory
 # --------------------------------------------------------------------------- #
+def _make_metrics_store(cfg: Config):
+    """In-memory by default; a SQLAlchemy-backed table when a database is
+    configured. The import is lazy so the default path — and the browser demo,
+    whose wheel ships without SQLAlchemy — never loads an ORM."""
+    if cfg.database_url:
+        from .store import SqlUsageStore
+        return SqlUsageStore(cfg.database_url)
+    return Metrics()
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     cfg = config or Config.from_env()
     app = FastAPI(
@@ -137,7 +154,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app.state.router = Router()
     app.state.cache = ResponseCache(cfg.cache_size)
     app.state.limiter = RateLimiter(cfg.rate_capacity, cfg.rate_refill_per_sec)
-    app.state.metrics = Metrics()
+    app.state.metrics = _make_metrics_store(cfg)
 
     def require_api_key(authorization: str = Header(default="")) -> str:
         token = authorization.removeprefix("Bearer ").strip()
@@ -259,7 +276,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         )
         if cacheable:
             cache.set(key, resp)
-        metrics_store.record(req.model, usage, cost, cached=False)
+        metrics_store.record(req.model, usage, cost, cached=False, latency_ms=round(latency, 2))
         return resp
 
     return app

@@ -90,6 +90,7 @@ Send the **same** request again → `"cached": true` and the provider is never t
 | Caching | [`cache.py`](llmgateway/cache.py) | LRU keyed on `sha256(model+messages+max_tokens)`; only `temperature==0` is cached |
 | Retries | [`retry.py`](llmgateway/retry.py) | Exponential backoff; `mock-flaky` fails twice then succeeds to prove it |
 | Cost accounting | [`pricing.py`](llmgateway/pricing.py) | Per-model $/1K table → USD per request, aggregated in `/metrics` |
+| Persistence | [`store.py`](llmgateway/store.py) | Optional SQLAlchemy 2.0 usage table + Alembic migration; `/metrics` aggregates from it when `GATEWAY_DATABASE_URL` is set, else in-memory |
 | Providers | [`providers.py`](llmgateway/providers.py) | `provider_name` is pure (list models with no key); real clients instantiate lazily |
 
 ## Enabling real providers
@@ -110,11 +111,19 @@ No code change — routing is by model-id prefix. The optional SDKs are imported
 | `GATEWAY_RATE_CAPACITY` | `60` | bucket size per key |
 | `GATEWAY_RATE_REFILL` | `1.0` | tokens/sec refill |
 | `GATEWAY_CACHE_SIZE` | `512` | LRU entries |
+| `GATEWAY_DATABASE_URL` | *(unset)* | persist usage & aggregate `/metrics` from a DB (SQLAlchemy URL, e.g. `sqlite:///gateway.db` or `postgresql+psycopg://…`); unset → in-memory |
+
+Persistence is opt-in — install it with `pip install -e ".[sql]"`, then:
+
+```bash
+export GATEWAY_DATABASE_URL=sqlite:///gateway.db
+alembic upgrade head           # create the usage table (production path)
+```
 
 ## Run it in Docker
 
 ```bash
-docker compose up --build      # gateway on :8000 with a health check
+docker compose up --build      # gateway on :8000, health check, usage persisted to a volume
 ```
 
 ## Design notes
@@ -122,6 +131,7 @@ docker compose up --build      # gateway on :8000 with a health check
 - **Why a mock provider?** So the gateway's *own* logic — auth, limiting, caching, retry, accounting — is testable in isolation from any network. The suite is deterministic and needs no keys, which is also what keeps CI free and green.
 - **Why cache only `temperature == 0`?** Caching a sampled (nondeterministic) completion would return one user's roll of the dice to another. Determinism is the correctness precondition for caching.
 - **Scaling path.** The rate limiter and cache are process-local by design (simple, fast, zero-dependency). The interfaces are the same ones you'd back with Redis for a multi-instance deployment — that's the only change needed.
+- **Metrics: in-memory by default, a table when you want it.** `/metrics` counts in a locked dict — all the offline demo can do, since its wheel ships without an ORM. Set `GATEWAY_DATABASE_URL` and the same numbers instead come from a `GROUP BY` over a per-request usage table (SQLAlchemy 2.0 + one Alembic migration), so they survive a restart and add up across instances. The store is imported lazily, so the default path never loads SQLAlchemy. See [`store.py`](llmgateway/store.py).
 
 ```
 llmgateway/
@@ -131,6 +141,7 @@ llmgateway/
   cache.py      LRU response cache keyed on the semantic request
   retry.py      exponential-backoff retry
   pricing.py    per-model $/1k table + cost()
+  store.py      optional SQLAlchemy usage table (metrics that persist)
   schemas.py    Pydantic request/response models (also the OpenAPI schema)
   cli.py        `serve` (uvicorn) · `demo` (offline)
 tests/          22 tests — API, auth, cache, rate limit, cost, retry, streaming

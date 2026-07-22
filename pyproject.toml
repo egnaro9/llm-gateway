@@ -25,7 +25,10 @@ dependencies = [
 [project.optional-dependencies]
 openai = ["openai>=1.0"]
 anthropic = ["anthropic>=0.39"]
-dev = ["pytest>=7", "httpx>=0.27"]
+# Persistence is opt-in: the base install and the browser demo run in-memory and
+# need no ORM. A deployed instance installs `.[sql]` and sets GATEWAY_DATABASE_URL.
+sql = ["sqlalchemy>=2.0", "alembic>=1.13"]
+dev = ["pytest>=7", "httpx>=0.27", "sqlalchemy>=2.0", "alembic>=1.13"]
 
 [project.scripts]
 llmgateway = "llmgateway.cli:main"
