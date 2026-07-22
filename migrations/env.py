@@ -17,7 +17,10 @@ from llmgateway.store import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Don't let alembic's logging setup switch off the app's "llmgateway" logger
+    # (fileConfig disables existing loggers by default) — that would silence the
+    # request log if migrations ever run in the serving process.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Let the environment supply the URL that alembic.ini deliberately omits.
 _url = os.environ.get("GATEWAY_DATABASE_URL")
