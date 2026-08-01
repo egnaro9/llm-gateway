@@ -1,12 +1,12 @@
 # llm-gateway
 
+**A multi-provider LLM gateway on FastAPI — auth, rate limiting, caching, retries, and per-model cost accounting behind one OpenAI-shaped endpoint.**
+
 [![ci](https://github.com/egnaro9/llm-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/egnaro9/llm-gateway/actions/workflows/ci.yml)
 [![python](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688)](https://fastapi.tiangolo.com/)
 [![live demo](https://img.shields.io/badge/demo-poke%20it%20in%20your%20browser-f2a53c)](https://egnaro9.github.io/llm-gateway/)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-
-**A multi-provider LLM gateway on FastAPI — auth, rate limiting, caching, retries, and per-model cost accounting behind one OpenAI-shaped endpoint.**
 
 Calling an LLM provider directly from your app means every service re-implements the same cross-cutting concerns: keys, retries, spend tracking, a per-tenant rate limit, a cache. This gateway centralizes them. Point your clients at one `POST /v1/chat/completions`; it routes by model to OpenAI, Anthropic, or a built-in **deterministic mock** — and the mock path means the whole thing **runs, is tested, and is cost-accounted with no API key and zero real spend.**
 
