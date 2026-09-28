@@ -18,7 +18,7 @@ client ─┤                                                                   
 
 - **One OpenAI-compatible API, many backends.** Route `gpt-*` → OpenAI, `claude-*` → Anthropic, `mock*` → offline mock, by model-id prefix.
 - **Everything a raw SDK doesn't give you:** Bearer-key auth, per-key **token-bucket rate limiting** (429 + `Retry-After`), an **LRU response cache** (identical deterministic prompts skip the provider), **exponential-backoff retries**, **per-model token + USD cost accounting**, a `/metrics` endpoint, and structured JSON request logs with a request id.
-- **Deterministic & offline by default.** The mock provider makes the test suite fast, free, and reproducible. **22 tests, green CI, no secrets.**
+- **Deterministic & offline by default.** The mock provider makes the test suite fast, free, and reproducible. **26 tests, green CI, no secrets.**
 
 ### ▶ [Poke the gateway in your browser](https://egnaro9.github.io/llm-gateway/)
 
@@ -144,7 +144,7 @@ llmgateway/
   store.py      optional SQLAlchemy usage table (metrics that persist)
   schemas.py    Pydantic request/response models (also the OpenAPI schema)
   cli.py        `serve` (uvicorn) · `demo` (offline)
-tests/          22 tests — API, auth, cache, rate limit, cost, retry, streaming
+tests/          26 tests — API, auth, cache, rate limit, cost, retry, streaming
 ```
 
 ---
