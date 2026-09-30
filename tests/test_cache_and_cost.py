@@ -1,6 +1,6 @@
 import pytest
 
-from llmgateway.cache import ResponseCache, cache_key
+from llmgateway.cache import ResponseCache, cache_key, tenant_id
 from llmgateway.pricing import cost_usd
 from llmgateway.providers import MockProvider, ProviderError, estimate_tokens
 from llmgateway.retry import RetryStats, with_retry
@@ -25,12 +25,35 @@ def _resp(model="mock-1"):
     )
 
 
+T1 = tenant_id("key-one")
+T2 = tenant_id("key-two")
+
+
 def test_cache_key_is_stable_and_content_sensitive():
     m1 = [Message(role="user", content="a")]
     m2 = [Message(role="user", content="b")]
-    assert cache_key("mock-1", m1, None) == cache_key("mock-1", m1, None)
-    assert cache_key("mock-1", m1, None) != cache_key("mock-1", m2, None)
-    assert cache_key("mock-1", m1, None) != cache_key("gpt-4o", m1, None)
+    assert cache_key("mock-1", m1, None, T1) == cache_key("mock-1", m1, None, T1)
+    assert cache_key("mock-1", m1, None, T1) != cache_key("mock-1", m2, None, T1)
+    assert cache_key("mock-1", m1, None, T1) != cache_key("gpt-4o", m1, None, T1)
+
+
+def test_cache_key_partitions_by_caller():
+    """The same prompt from two callers must not share one entry.
+
+    A shared entry is a usage oracle: the second caller learns the first sent
+    that exact prompt, and takes a response the first one paid for.
+    """
+    m = [Message(role="user", content="same prompt")]
+    assert cache_key("mock-1", m, None, T1) != cache_key("mock-1", m, None, T2)
+
+
+def test_tenant_id_does_not_reveal_the_credential():
+    secret = "dev-key"
+    tid = tenant_id(secret)
+    assert secret not in tid
+    assert tid == tenant_id(secret)
+    assert tid != tenant_id("dev-keyy")
+    assert len(tid) == 64
 
 
 def test_lru_eviction():

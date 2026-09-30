@@ -23,7 +23,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from . import __version__
-from .cache import ResponseCache, cache_key
+from .cache import ResponseCache, cache_key, tenant_id
 from .pricing import PRICING, cost_usd, price_for
 from .providers import Router, messages_tokens
 from .ratelimit import RateLimiter
@@ -229,7 +229,11 @@ def create_app(config: Config | None = None) -> FastAPI:
             return _stream_response(req, provider, metrics_store)
 
         cacheable = req.temperature == 0.0
-        key = cache_key(req.model, req.messages, req.max_tokens) if cacheable else ""
+        key = (
+            cache_key(req.model, req.messages, req.max_tokens, tenant_id(api_key))
+            if cacheable
+            else ""
+        )
         if cacheable:
             hit = cache.get(key)
             if hit is not None:

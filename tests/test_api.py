@@ -99,3 +99,33 @@ def test_flaky_model_recovers_via_retry(client, auth):
     r = client.post("/v1/chat/completions", json=_body(model="mock-flaky"), headers=auth)
     assert r.status_code == 200
     assert "hello gateway" in r.json()["choices"][0]["message"]["content"]
+
+
+def test_cache_is_not_shared_between_api_keys():
+    """Two callers, one process, identical deterministic request.
+
+    The second caller must reach the provider rather than read the first
+    caller's cached response.
+    """
+    from fastapi.testclient import TestClient
+
+    from llmgateway.app import Config, create_app
+
+    app = create_app(Config(api_keys=frozenset({"key-one", "key-two"}), rate_capacity=1000))
+    c = TestClient(app)
+    body = {
+        "model": "mock-1",
+        "messages": [{"role": "user", "content": "partition me"}],
+        "temperature": 0.0,
+    }
+
+    first = c.post("/v1/chat/completions", json=body, headers={"Authorization": "Bearer key-one"})
+    assert first.status_code == 200
+    assert first.json()["cached"] is False
+
+    again = c.post("/v1/chat/completions", json=body, headers={"Authorization": "Bearer key-one"})
+    assert again.json()["cached"] is True, "same caller should still get a cache hit"
+
+    other = c.post("/v1/chat/completions", json=body, headers={"Authorization": "Bearer key-two"})
+    assert other.status_code == 200
+    assert other.json()["cached"] is False, "a second caller must not read the first caller's entry"

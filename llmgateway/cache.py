@@ -1,9 +1,22 @@
-"""A tiny LRU response cache keyed on the semantic request.
+"""A tiny LRU response cache keyed on the semantic request, per caller.
 
-Only deterministic requests (``temperature == 0``) are cacheable — caching a
+Only deterministic requests (``temperature == 0``) are cacheable: caching a
 sampled response would be wrong. Keying on a hash of (model, messages,
 max_tokens) means identical prompts skip the provider entirely, which is the
 single biggest cost/latency win a gateway offers.
+
+The key is also partitioned by caller. One process serves every configured
+API key from one cache instance, so a key covering only the request would let
+any tenant read another tenant's entry by sending the same prompt. The
+response body is not itself the leak, since at ``temperature == 0`` it is a
+deterministic function of the request the second tenant supplied. What leaks
+is that someone else sent that exact prompt, which over a guessable prompt
+space is a usage oracle on another tenant, and the provider cost of the entry,
+which the first tenant paid and the second does not. Both contradict a gateway
+whose reason to exist is per-tenant accounting.
+
+The partition is a digest, never the raw credential, so the secret does not
+enter the hashed payload.
 """
 from __future__ import annotations
 
@@ -15,8 +28,19 @@ from typing import List, Optional
 from .schemas import ChatResponse, Message
 
 
-def cache_key(model: str, messages: List[Message], max_tokens: Optional[int]) -> str:
+def tenant_id(api_key: str) -> str:
+    """A stable, non-reversing handle for a caller, for use as a cache partition."""
+    return hashlib.sha256(b"llm-gateway/tenant/v1:" + api_key.encode("utf-8")).hexdigest()
+
+
+def cache_key(
+    model: str,
+    messages: List[Message],
+    max_tokens: Optional[int],
+    tenant: str,
+) -> str:
     payload = {
+        "tenant": tenant,
         "model": model,
         "messages": [m.model_dump() for m in messages],
         "max_tokens": max_tokens,
